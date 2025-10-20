@@ -1,4 +1,4 @@
-# gommander
+# gocommander
 
 A Go implementation for command-line interfaces with Node.js compatibility
 
@@ -28,13 +28,13 @@ This project provides a Go implementation of the command-line interfaces that ca
 ### For Go Projects
 
 ```bash
-go get github.com/rohitsoni-dev/gommander
+go get github.com/rohitsoni-dev/gocommander
 ```
 
 ### For Node.js Projects
 
 ```bash
-pnpm install gommander
+npm install gocommander
 ```
 
 _Note: Building from source requires Visual Studio with C++ development tools on Windows_
@@ -44,14 +44,14 @@ _Note: Building from source requires Visual Studio with C++ development tools on
 ### Node.js Usage
 
 ```javascript
-const { Command } = require("gommander");
+const { Command } = require("gocommander");
 
 const program = new Command();
 program
   .version("1.0.0")
   .description("My awesome CLI application")
   .action(() => {
-    console.log("Hello from gommander!");
+    console.log("Hello from gocommander!");
   });
 
 program.parse(process.argv);

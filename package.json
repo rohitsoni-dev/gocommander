@@ -1,5 +1,5 @@
 {
-  "name": "gommander",
+  "name": "gocommander",
   "version": "1.0.0",
   "description": "A Go implementation for command-line interfaces with Node.js compatibility",
   "main": "index.js",
@@ -11,10 +11,14 @@
     "go:build-dll": "node scripts/build-go.js --dll",
     "install": "node scripts/install.js",
     "test": "node test/test.js",
-    "advanced-test": "node test/advanced-test.js"
+    "advanced-test": "node test/advanced-test.js",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "publish-version": "git push && git push --tags && npm publish"
   },
   "keywords": [
-    "gommander",
+    "gocommander",
     "commander",
     "cli",
     "command",
@@ -26,12 +30,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rohitsoni-dev/gommander.git"
+    "url": "git+https://github.com/rohitsoni-dev/gocommander.git"
   },
   "bugs": {
-    "url": "https://github.com/rohitsoni-dev/gommander/issues"
+    "url": "https://github.com/rohitsoni-dev/gocommander/issues"
   },
-  "homepage": "https://github.com/rohitsoni-dev/gommander#readme",
+  "homepage": "https://github.com/rohitsoni-dev/gocommander#readme",
   "dependencies": {
     "node-addon-api": "^7.0.0"
   },
