@@ -1,0 +1,54 @@
+{
+  "name": "gommander",
+  "version": "1.0.0",
+  "description": "A Go implementation for command-line interfaces with Node.js compatibility",
+  "main": "index.js",
+  "scripts": {
+    "build": "node-gyp configure build",
+    "clean": "node-gyp clean",
+    "rebuild": "node-gyp rebuild",
+    "go:build": "node scripts/build-go.js",
+    "go:build-dll": "node scripts/build-go.js --dll",
+    "install": "node scripts/install.js",
+    "test": "node test/test.js",
+    "advanced-test": "node test/advanced-test.js"
+  },
+  "keywords": [
+    "gommander",
+    "commander",
+    "cli",
+    "command",
+    "option",
+    "parser",
+    "go"
+  ],
+  "author": "Rohit Soni",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rohitsoni-dev/gommander.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rohitsoni-dev/gommander/issues"
+  },
+  "homepage": "https://github.com/rohitsoni-dev/gommander#readme",
+  "dependencies": {
+    "node-addon-api": "^7.0.0"
+  },
+  "devDependencies": {
+    "node-gyp": "^10.0.0"
+  },
+  "gypfile": true,
+  "files": [
+    "index.js",
+    "lib/",
+    "src/",
+    "binding.gyp",
+    "scripts/",
+    "examples/",
+    "test/",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ]
+}
