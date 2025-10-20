@@ -7,7 +7,7 @@ on:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,10 +31,11 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Verify build environment
+        shell: pwsh
         run: |
           python --version
           msbuild -version
-          node-gyp --version
+          npx node-gyp --version
 
       - name: Setup Go
         uses: actions/setup-go@v4
@@ -62,23 +63,25 @@ jobs:
 
       - name: Get commit messages
         id: get_commits
+        shell: pwsh
         run: |
-          COMMITS=$(git log --format=%s $(git describe --tags --abbrev=0)..HEAD)
-          echo "commits<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          $commits = git log --format=%s $(git describe --tags --abbrev=0)..HEAD
+          "commits<<EOF" >> $env:GITHUB_OUTPUT
+          $commits >> $env:GITHUB_OUTPUT
+          "EOF" >> $env:GITHUB_OUTPUT
 
       - name: Determine version bump
         id: version_bump
+        shell: pwsh
         run: |
-          COMMITS="${{ steps.get_commits.outputs.commits }}"
-          if echo "$COMMITS" | grep -q "^BREAKING CHANGE:\|^[[:alnum:]]*!:"; then
-            echo "bump=major" >> $GITHUB_OUTPUT
-          elif echo "$COMMITS" | grep -q "^feat:"; then
-            echo "bump=minor" >> $GITHUB_OUTPUT
-          else
-            echo "bump=patch" >> $GITHUB_OUTPUT
-          fi
+          $commits = "${{ steps.get_commits.outputs.commits }}"
+          if ($commits -match "^BREAKING CHANGE:|^[a-zA-Z0-9]*!:") {
+            "bump=major" >> $env:GITHUB_OUTPUT
+          } elseif ($commits -match "^feat:") {
+            "bump=minor" >> $env:GITHUB_OUTPUT
+          } else {
+            "bump=patch" >> $env:GITHUB_OUTPUT
+          }
 
       - name: Update version
         run: |
