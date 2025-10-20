@@ -22,13 +22,26 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.25.3'
+          go-version: '1.21'
+          cache: true
+          cache-dependency-path: src/go/go.sum
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Go files
+        run: |
+          pnpm run go:build
+          pnpm run go:build-dll
+          pnpm run build
 
       - name: Run tests
-        run: npm test
+        run: pnpm test
 
       - name: Get commit messages
         id: get_commits
@@ -54,7 +67,7 @@ jobs:
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "github-actions[bot]"
-          npm version ${{ steps.version_bump.outputs.bump }} -m "chore(release): %s [skip ci]"
+          pnpm version ${{ steps.version_bump.outputs.bump }} -m "chore(release): %s [skip ci]"
 
       - name: Push changes
         run: |
@@ -64,6 +77,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to NPM
-        run: npm publish
+        run: pnpm publish --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
