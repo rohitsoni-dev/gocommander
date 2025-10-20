@@ -1,6 +1,6 @@
 {
   "name": "gocommander",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A Go implementation for command-line interfaces with Node.js compatibility",
   "main": "index.js",
   "scripts": {
