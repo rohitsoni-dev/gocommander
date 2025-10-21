@@ -87,6 +87,66 @@ The project consists of three main components:
 
 See the [examples](./examples/) directory for usage examples.
 
+### Project Boilerplate Generator
+
+A CLI tool for generating project boilerplates:
+
+```bash
+# List available templates
+node examples/boilerplate-generator.js list
+
+# Generate a new Node.js Express project
+node examples/boilerplate-generator.js generate node-express my-api
+
+# Generate a new React app with a custom name
+node examples/boilerplate-generator.js generate react-app my-app --name "My React Application"
+```
+
+This example demonstrates advanced features like:
+
+- Multiple template support
+- Dynamic file generation with placeholder replacement
+- Nested directory creation
+- Comprehensive error handling
+
+### Todo Manager
+
+A CLI tool for managing todo lists:
+
+```bash
+# Add a new todo (note: options must come before arguments)
+node examples/todo-manager.js add --priority=high --tags=shopping,urgent "Buy groceries"
+
+# List incomplete todos
+node examples/todo-manager.js list
+
+# List all todos including completed ones
+node examples/todo-manager.js list --all
+
+# Filter by priority
+node examples/todo-manager.js list --priority=high
+
+# Filter by tag
+node examples/todo-manager.js list --tag=shopping
+
+# Mark a todo as complete
+node examples/todo-manager.js complete 1
+
+# Delete a todo
+node examples/todo-manager.js delete 2
+
+# Clear completed todos
+node examples/todo-manager.js clear
+```
+
+This example demonstrates features like:
+
+- Persistent data storage in JSON format
+- Priority levels and tagging system
+- Filtering and sorting capabilities
+- Data validation and error handling
+- Proper handling of command-line argument ordering
+
 ## Testing
 
 Run Go tests: `go test ./src/go/...`

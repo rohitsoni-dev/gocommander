@@ -139,7 +139,7 @@ async function install() {
             "-buildmode=c-shared",
             "-o",
             "../gommander.dll",
-            "commander.go",
+            "gommander.go",
           ],
           goSrcDir
         );
