@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Example demonstrating the commander-go API
-const { Command } = require("../index.js");
+const { Command } = require("gocommander");
 const program = new Command();
 
 // This is used as an example in the README for the Quick Start.
