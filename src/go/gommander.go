@@ -6,10 +6,13 @@ package main
 import "C"
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -594,47 +597,107 @@ func testCommand() {
 }
 
 // Exported functions for C bindings
-// We use unsafe.Pointer to pass Go objects to C and back
+// Using proper C types (C.uintptr_t, *C.char) as specified in requirements
 
-var commandRegistry = make(map[uintptr]*Command)
-var nextID uintptr = 1
+// Thread-safe command registry system with automatic cleanup
+var (
+	commandRegistry = make(map[uintptr]*Command)
+	commandRefCount = make(map[uintptr]int)
+	nextID          uintptr = 1
+	registryMutex   sync.RWMutex
+	cleanupTicker   *time.Ticker
+	cleanupStop     chan bool
+)
+
+// Error codes for C interop
+const (
+	SUCCESS           = 0
+	ERROR_INVALID_ID  = 1
+	ERROR_NULL_PARAM  = 2
+	ERROR_PARSE_FAIL  = 3
+	ERROR_MEMORY      = 4
+)
 
 //export CreateCommand
-func CreateCommand(name *C.char) unsafe.Pointer {
+func CreateCommand(name *C.char) C.uintptr_t {
+	if name == nil {
+		return C.uintptr_t(0) // Invalid ID for null parameter
+	}
+
 	goName := C.GoString(name)
 	cmd := NewCommand(goName)
+
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
 
 	// Store the command in our registry and return its ID
 	id := nextID
 	nextID++
 	commandRegistry[id] = cmd
+	commandRefCount[id] = 1 // Initial reference count
 
-	// Return the ID as an unsafe.Pointer
-	return unsafe.Pointer(id)
+	return C.uintptr_t(id)
 }
 
-//export AddCommand
-func AddCommand(parentPtr unsafe.Pointer, childPtr unsafe.Pointer) {
-	// Convert pointers back to commands
-	parentID := uintptr(parentPtr)
-	childID := uintptr(childPtr)
-
-	parent, parentExists := commandRegistry[parentID]
-	child, childExists := commandRegistry[childID]
-
-	if parentExists && childExists {
-		parent.AddCommand(child)
+//export AddOption
+func AddOption(cmdPtr C.uintptr_t, flags *C.char, desc *C.char, defaultVal *C.char) C.int {
+	if flags == nil || desc == nil {
+		return ERROR_NULL_PARAM
 	}
+
+	cmd, exists := getCommand(uintptr(cmdPtr))
+	if !exists {
+		return ERROR_INVALID_ID
+	}
+
+	goFlags := C.GoString(flags)
+	goDesc := C.GoString(desc)
+	
+	option := NewOption(goFlags, goDesc)
+	
+	// Set default value if provided
+	if defaultVal != nil {
+		goDefault := C.GoString(defaultVal)
+		option.SetDefault(goDefault)
+	}
+
+	cmd.AddOption(option)
+	return SUCCESS
 }
 
-//export Parse
-func Parse(cmdPtr unsafe.Pointer, argc C.int, argv **C.char) C.int {
-	// Convert pointer back to command
-	cmdID := uintptr(cmdPtr)
-	cmd, exists := commandRegistry[cmdID]
+//export AddArgument
+func AddArgument(cmdPtr C.uintptr_t, name *C.char, desc *C.char, required C.int) C.int {
+	if name == nil || desc == nil {
+		return ERROR_NULL_PARAM
+	}
 
+	cmd, exists := getCommand(uintptr(cmdPtr))
 	if !exists {
-		return 1 // Error
+		return ERROR_INVALID_ID
+	}
+
+	goName := C.GoString(name)
+	goDesc := C.GoString(desc)
+	
+	argument := NewArgument(goName, goDesc)
+	argument.SetRequired(required != 0)
+
+	cmd.AddArgument(argument)
+	return SUCCESS
+}
+
+//export ParseArgs
+func ParseArgs(cmdPtr C.uintptr_t, argc C.int, argv **C.char) *C.char {
+	cmd, exists := getCommand(uintptr(cmdPtr))
+	if !exists {
+		// Return JSON error response
+		errorResult := map[string]interface{}{
+			"success": false,
+			"error":   "Invalid command ID",
+			"code":    ERROR_INVALID_ID,
+		}
+		jsonBytes, _ := json.Marshal(errorResult)
+		return C.CString(string(jsonBytes))
 	}
 
 	// Convert C argv to Go string slice safely
@@ -642,33 +705,269 @@ func Parse(cmdPtr unsafe.Pointer, argc C.int, argv **C.char) C.int {
 	for i := 0; i < int(argc); i++ {
 		// Get the i-th element of argv
 		argPtr := *(**C.char)(unsafe.Pointer(uintptr(unsafe.Pointer(argv)) + uintptr(i)*unsafe.Sizeof((*C.char)(nil))))
-		args[i] = C.GoString(argPtr)
+		if argPtr != nil {
+			args[i] = C.GoString(argPtr)
+		}
 	}
 
-	// Parse the command
-	err := cmd.ParseCommand(args)
-	if err != nil {
-		return 1 // Error
-	}
-
-	return 0 // Success
+	// Parse the command and return JSON result
+	result := parseCommandToJSON(cmd, args)
+	return C.CString(result)
 }
 
-// Initialize function for C bindings
-//
+//export GetHelp
+func GetHelp(cmdPtr C.uintptr_t) *C.char {
+	cmd, exists := getCommand(uintptr(cmdPtr))
+	if !exists {
+		return C.CString("")
+	}
+
+	help := NewHelp(cmd)
+	helpText := help.Generate()
+	return C.CString(helpText)
+}
+
 //export Initialize
 func Initialize() {
-	// Initialization code if needed
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+	
 	// Reset the registry
 	commandRegistry = make(map[uintptr]*Command)
+	commandRefCount = make(map[uintptr]int)
+	nextID = 1
+	
+	// Start automatic cleanup routine
+	startCleanupRoutine()
+}
+
+//export Cleanup
+func Cleanup() {
+	// Stop cleanup routine first
+	stopCleanupRoutine()
+	
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+	
+	// Clear the registry to free memory
+	commandRegistry = make(map[uintptr]*Command)
+	commandRefCount = make(map[uintptr]int)
 	nextID = 1
 }
 
-// Version function for C bindings
-//
-//export Version
-func Version() *C.char {
+//export GetVersion
+func GetVersion() *C.char {
 	return C.CString("1.0.0")
+}
+
+//export AddRef
+func AddRef(cmdPtr C.uintptr_t) C.int {
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+
+	id := uintptr(cmdPtr)
+	if _, exists := commandRegistry[id]; !exists {
+		return ERROR_INVALID_ID
+	}
+
+	commandRefCount[id]++
+	return SUCCESS
+}
+
+//export Release
+func Release(cmdPtr C.uintptr_t) C.int {
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+
+	id := uintptr(cmdPtr)
+	if _, exists := commandRegistry[id]; !exists {
+		return ERROR_INVALID_ID
+	}
+
+	commandRefCount[id]--
+	if commandRefCount[id] <= 0 {
+		// Clean up the command when reference count reaches zero
+		delete(commandRegistry, id)
+		delete(commandRefCount, id)
+	}
+
+	return SUCCESS
+}
+
+// Internal function to start automatic cleanup routine
+func startCleanupRoutine() {
+	if cleanupTicker != nil {
+		return // Already running
+	}
+
+	cleanupTicker = time.NewTicker(30 * time.Second) // Cleanup every 30 seconds
+	cleanupStop = make(chan bool)
+
+	go func(ticker *time.Ticker) {
+		for {
+			select {
+			case <-ticker.C:
+				performCleanup()
+			case <-cleanupStop:
+				ticker.Stop()
+				return
+			}
+		}
+	}(cleanupTicker)
+}
+
+// Internal function to stop cleanup routine
+func stopCleanupRoutine() {
+	if cleanupTicker != nil {
+		select {
+		case cleanupStop <- true:
+		default:
+		}
+		cleanupTicker.Stop()
+		cleanupTicker = nil
+		if cleanupStop != nil {
+			close(cleanupStop)
+			cleanupStop = nil
+		}
+	}
+}
+
+// Internal function to perform cleanup of unused commands
+func performCleanup() {
+	registryMutex.Lock()
+	defer registryMutex.Unlock()
+
+	// Find commands with zero or negative reference counts
+	toDelete := make([]uintptr, 0)
+	for id, refCount := range commandRefCount {
+		if refCount <= 0 {
+			toDelete = append(toDelete, id)
+		}
+	}
+
+	// Clean up unused commands
+	for _, id := range toDelete {
+		delete(commandRegistry, id)
+		delete(commandRefCount, id)
+	}
+}
+
+// Enhanced registry management functions
+func getCommand(id uintptr) (*Command, bool) {
+	registryMutex.RLock()
+	defer registryMutex.RUnlock()
+	
+	cmd, exists := commandRegistry[id]
+	return cmd, exists
+}
+
+func getRegistryStats() (int, int) {
+	registryMutex.RLock()
+	defer registryMutex.RUnlock()
+	
+	return len(commandRegistry), len(commandRefCount)
+}
+
+// Helper function to parse command and return JSON result
+func parseCommandToJSON(cmd *Command, args []string) string {
+	// Create a copy of the command for parsing to avoid modifying the original
+	parsedOptions := make(map[string]interface{})
+	remainingArgs := make([]string, 0)
+	errors := make([]string, 0)
+
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+
+		// Check for help option
+		if arg == "-h" || arg == "--help" {
+			result := map[string]interface{}{
+				"success": true,
+				"help":    true,
+				"command": cmd.Name,
+			}
+			jsonBytes, _ := json.Marshal(result)
+			return string(jsonBytes)
+		}
+
+		// Check for version option
+		if (arg == "-V" || arg == "--version") && cmd.Version != "" {
+			result := map[string]interface{}{
+				"success": true,
+				"version": cmd.Version,
+				"command": cmd.Name,
+			}
+			jsonBytes, _ := json.Marshal(result)
+			return string(jsonBytes)
+		}
+
+		// Check if it's an option
+		if strings.HasPrefix(arg, "-") {
+			// Find the option
+			option := cmd.FindOption(arg)
+			if option == nil {
+				if !cmd.AllowUnknown {
+					errors = append(errors, fmt.Sprintf("unknown option '%s'", arg))
+					i++
+					continue
+				}
+				remainingArgs = append(remainingArgs, arg)
+				i++
+				continue
+			}
+
+			// Handle option value
+			if option.Required || option.Optional {
+				i++
+				if i >= len(args) {
+					errors = append(errors, fmt.Sprintf("option '%s' missing argument", arg))
+					break
+				}
+				value := args[i]
+				parsedOptions[option.Name()] = value
+			} else {
+				// Boolean flag
+				parsedOptions[option.Name()] = true
+			}
+		} else {
+			// It's a command or argument
+			// Check if it's a subcommand
+			subcmd := cmd.FindCommand(arg)
+			if subcmd != nil {
+				// Parse subcommand with remaining args
+				return parseCommandToJSON(subcmd, args[i+1:])
+			}
+
+			// It's an argument
+			remainingArgs = append(remainingArgs, arg)
+		}
+
+		i++
+	}
+
+	// Validate arguments
+	if len(remainingArgs) < cmd.CountRequiredArguments() {
+		errors = append(errors, "missing required arguments")
+	}
+
+	// Apply default values for options
+	for _, opt := range cmd.Options {
+		if _, exists := parsedOptions[opt.Name()]; !exists && opt.DefaultValue != nil {
+			parsedOptions[opt.Name()] = opt.DefaultValue
+		}
+	}
+
+	// Create result
+	result := map[string]interface{}{
+		"success":   len(errors) == 0,
+		"command":   cmd.Name,
+		"options":   parsedOptions,
+		"arguments": remainingArgs,
+		"errors":    errors,
+	}
+
+	jsonBytes, _ := json.Marshal(result)
+	return string(jsonBytes)
 }
 
 func main() {
