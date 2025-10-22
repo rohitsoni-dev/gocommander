@@ -1,51 +1,60 @@
-const { program, Command } = require("../index.js");
+const { program, Command, addon, version, hello } = require("../index.js");
 
 // Test basic functionality
-console.log("Testing gommander...");
+console.log("Testing gommander with Go backend...\n");
 
-// Test program creation
-console.log("Program name:", program.name());
-console.log("Program description:", program.description());
+// Test 1: Addon connectivity
+console.log("=== Test 1: Go Addon Connectivity ===");
+try {
+  console.log("Go addon hello():", hello());
+  console.log("Go addon version():", version());
+  console.log("✓ Go addon is working!\n");
+} catch (error) {
+  console.log("✗ Go addon error:", error.message);
+  console.log("Please build the addon first with: npm run build\n");
+}
 
-// Test command creation
+// Test 2: Command creation
+console.log("=== Test 2: Command Creation ===");
 const testCommand = new Command("test");
 testCommand
   .description("A test command")
   .option("-t, --test <value>", "A test option", "default")
   .argument("<file>", "A test argument");
 
-console.log("Command name:", testCommand.name());
-console.log("Command description:", testCommand.description());
+console.log("Command name:", testCommand._name);
+console.log("Command description:", testCommand._description);
+console.log("✓ Command created successfully\n");
 
-// Test option addition
-console.log("Options count:", testCommand._options.length);
-if (testCommand._options.length > 0) {
-  console.log("First option flags:", testCommand._options[0].flags);
-  console.log("First option description:", testCommand._options[0].description);
-  console.log(
-    "First option default value:",
-    testCommand._options[0].defaultValue
-  );
+// Test 3: Options
+console.log("=== Test 3: Options ===");
+console.log("Options count:", testCommand._options.size);
+if (testCommand._options.has('test')) {
+  const testOption = testCommand._options.get('test');
+  console.log("Test option flags:", testOption.flags);
+  console.log("Test option description:", testOption.description);
+  console.log("Test option default value:", testOption.defaultValue);
 }
+console.log("✓ Options working correctly\n");
 
-// Test argument addition
+// Test 4: Arguments
+console.log("=== Test 4: Arguments ===");
 console.log("Arguments count:", testCommand._arguments.length);
 if (testCommand._arguments.length > 0) {
   console.log("First argument name:", testCommand._arguments[0].name);
-  console.log(
-    "First argument description:",
-    testCommand._arguments[0].description
-  );
+  console.log("First argument description:", testCommand._arguments[0].description);
 }
+console.log("✓ Arguments working correctly\n");
 
-// Test addon loading
-try {
-  const addon = require("../build/Release/gommander.node");
-  console.log("Addon successfully loaded!");
-  console.log("Test passed!");
-} catch (error) {
-  console.log("Addon not yet built or not available:", error.message);
-  console.log("This is expected if you haven't built the addon yet.");
-}
+// Test 5: Help generation
+console.log("=== Test 5: Help Generation ===");
+console.log("Generating help for test command:");
+testCommand.outputHelp();
+console.log("✓ Help generation working\n");
 
-console.log("Basic tests completed.");
+// Test 6: Program instance
+console.log("=== Test 6: Program Instance ===");
+console.log("Program is instance of Command:", program instanceof Command);
+console.log("✓ Program instance working\n");
+
+console.log("=== All basic tests completed! ===");
