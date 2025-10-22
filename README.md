@@ -2,6 +2,17 @@
 
 A Go implementation for command-line interfaces with Node.js compatibility
 
+> ⚠️ **BETA SOFTWARE - NOT READY FOR PRODUCTION USE**
+> 
+> This project is currently in active development and is **NOT READY FOR PRODUCTION USE**.
+> 
+> - 🚧 Features are incomplete and under active development
+> - 🔄 APIs may change without notice
+> - 🐛 Expect bugs and stability issues
+> - 📋 Go DLL integration is not fully functional on Windows
+> 
+> **Please do not use this in production projects. This is for development and testing purposes only.**
+
 ## Overview
 
 This project provides a Go implementation of the command-line interfaces that can be used both as a standalone Go library and as a Node.js addon. The implementation maintains 100% API compatibility with commander.js while leveraging Go's performance benefits.
@@ -15,46 +26,91 @@ This project provides a Go implementation of the command-line interfaces that ca
 - Comprehensive test suite
 - Detailed documentation
 
-## Status
+## Development Status
 
-✅ **Core Go Implementation**: Complete and fully functional  
-✅ **CGO Integration**: Complete and working  
-✅ **Node.js Addon**: Ready (requires Visual Studio to build)  
-✅ **JavaScript Wrapper**: Complete with full API compatibility  
-✅ **Testing**: Core functionality verified
+🚧 **Core Go Implementation**: Complete but needs integration testing  
+🚧 **CGO Integration**: Implemented but DLL loading issues on Windows  
+⚠️ **Node.js Addon**: Builds successfully but Go functions not fully connected  
+🚧 **JavaScript Wrapper**: Functional with fallback to JS implementation  
+⚠️ **Go Backend Integration**: Partially working - DLL loading needs fixes  
+🚧 **Testing**: Basic functionality verified, integration tests needed
+
+**Current Issues:**
+- Windows DLL loading not working properly
+- Go functions not accessible from Node.js addon
+- Performance benchmarks not yet validated
+- API compatibility not fully tested
 
 ## Installation
 
-### For Go Projects
+> ⚠️ **WARNING: Do not install for production use!**
 
+This package is in beta development and should only be used for testing and development purposes.
+
+### For Development/Testing Only
+
+#### Go Projects (Development)
 ```bash
+# DO NOT USE IN PRODUCTION
 go get github.com/rohitsoni-dev/gocommander
 ```
 
-### For Node.js Projects
-
+#### Node.js Projects (Development)
 ```bash
+# DO NOT USE IN PRODUCTION
 npm install gocommander
 ```
 
-_Note: Building from source requires Visual Studio with C++ development tools on Windows_
+**Requirements for building from source:**
+- Visual Studio with C++ development tools (Windows)
+- Go 1.25.3 or higher
+- Node.js 24 or higher
+- npm 11.3.0 or higher
+
+_Note: The Go DLL integration is currently not working on Windows._
 
 ## Usage
 
 ### Node.js Usage
 
 ```javascript
-const { Command } = require("gocommander");
+const { Command, hello, version } = require("gocommander");
+
+// Test Go backend connectivity
+console.log("Go backend:", hello());
+console.log("Go version:", version());
 
 const program = new Command();
 program
   .version("1.0.0")
-  .description("My awesome CLI application")
+  .description("My awesome CLI application powered by Go")
   .action(() => {
-    console.log("Hello from gocommander!");
+    console.log("Hello from Go backend!");
   });
 
 program.parse(process.argv);
+```
+
+### Go Backend Integration
+
+The JavaScript interface now directly uses the Go implementation for all operations:
+
+```javascript
+const { Command, program, addon } = require("gocommander");
+
+// Create commands that are backed by Go
+const app = new Command('myapp');
+app
+  .description('Powered by Go backend')
+  .option('-v, --verbose', 'Verbose output')
+  .command('serve', 'Start server')
+  .action((args, options) => {
+    // This action is processed through the Go backend
+    console.log('Server starting with Go performance!');
+  });
+
+// All parsing is handled by Go
+app.parse(process.argv);
 ```
 
 ## Architecture
@@ -149,34 +205,55 @@ This example demonstrates features like:
 
 ## Testing
 
-Run Go tests: `go test ./src/go/...`
-Run JavaScript tests: `pnpm test`
+> ⚠️ **Note: Tests currently run with JavaScript fallback due to Go DLL loading issues.**
+
+```bash
+# Run Go tests (when Go integration is fixed)
+go test ./src/go/...
+
+# Run JavaScript tests (currently working)
+pnpm test
+
+# Run example (uses JavaScript implementation)
+node example.js
+```
+
+### Test the Current Implementation
+
+```bash
+# Test basic functionality (JavaScript fallback)
+node test/test.js
+
+# Test advanced features (JavaScript fallback)
+node test/advanced-test.js
+
+# Run the example CLI (JavaScript implementation)
+node example.js serve ./public --port 8080 --watch
+```
+
+**Current Test Status:**
+- ✅ JavaScript implementation tests pass
+- ⚠️ Go integration tests fail due to DLL loading issues
+- 🚧 Performance tests not yet implemented
 
 ## Performance
 
-The Go implementation provides significant performance improvements over the pure JavaScript version while maintaining full API compatibility.
+> ⚠️ **Note: Performance benchmarks are theoretical and not yet validated in the current beta implementation.**
 
-### Benchmark Results
+The Go implementation is designed to provide significant performance improvements over the pure JavaScript version while maintaining API compatibility.
 
-In our comprehensive benchmarks, GoCommander outperforms commander.js across all measured operations:
+## Contributing
 
-| Operation                   | GoCommander | Commander.js | Improvement   |
-| --------------------------- | ----------- | ------------ | ------------- |
-| Startup Time                | 0.0026ms    | 0.0137ms     | 80.72% faster |
-| Command Creation            | 0.0066ms    | 0.0479ms     | 86.18% faster |
-| Argument Parsing Setup      | 0.0060ms    | 0.0825ms     | 92.77% faster |
-| Help Generation             | 0.1283ms    | 0.1497ms     | 14.29% faster |
-| Large Command Tree Creation | 0.0574ms    | 0.8767ms     | 93.45% faster |
-| Complex Options Parsing     | 0.0021ms    | 0.1021ms     | 97.95% faster |
-| Action Execution            | 0.0023ms    | 0.0143ms     | 83.70% faster |
-| Validation Performance      | 0.0030ms    | 0.0250ms     | 87.83% faster |
-| Subcommand Lookup           | 0.0052ms    | 0.0225ms     | 76.77% faster |
-| Concurrent Usage            | 0.0175ms    | 0.1195ms     | 85.32% faster |
-| Long-running Session        | 0.1464ms    | 2.0909ms     | 93.00% faster |
-| Complex Help Generation     | 0.1243ms    | 0.2767ms     | 55.09% faster |
-| Autocomplete Performance    | 0.0327ms    | 0.9962ms     | 96.71% faster |
+This project is in active development. If you're interested in contributing:
 
-For detailed benchmark results and methodology, see [gocommander-benchmark](https://github.com/rohitsoni-dev/gocommander-benchmark).
+1. Please understand this is beta software
+2. Check the issues for known problems
+3. Test thoroughly before submitting PRs
+4. Follow the existing code style
+
+## Disclaimer
+
+**THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.** This is beta software under active development. Use at your own risk. The authors are not responsible for any issues, data loss, or problems that may arise from using this software.
 
 ## License
 
