@@ -5,14 +5,6 @@
       "sources": [
         "src/addon.cc"
       ],
-      "libraries": [
-        "../src/gommander.a"
-      ],
-      "conditions": [
-        ["OS==\"win\"", {
-          "libraries": []
-        }]
-      ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",
         "src"
@@ -23,22 +15,71 @@
       "cflags!": [ "-fno-exceptions" ],
       "cflags_cc!": [ "-fno-exceptions" ],
       "defines": [ 
-        "NAPI_DISABLE_CPP_EXCEPTIONS",
-        "GO_CGO_PROLOGUE_H="
+        "NAPI_DISABLE_CPP_EXCEPTIONS"
       ],
       "conditions": [
-        ["OS==\"win\"", {
+        ["OS=='win'", {
+          "libraries": [
+            "../src/gommander.lib"
+          ],
           "defines": [
-            "_HAS_EXCEPTIONS=1"
+            "_HAS_EXCEPTIONS=1",
+            "WIN32_LEAN_AND_MEAN",
+            "NOMINMAX"
           ],
           "msvs_settings": {
             "VCCLCompilerTool": {
               "ExceptionHandling": 1,
+              "RuntimeLibrary": 2,
               "AdditionalIncludeDirectories": [
-                "<!@(node -p \"require('node-addon-api').include\")"
+                "<!@(node -p \"require('node-addon-api').include\")",
+                "src"
+              ]
+            },
+            "VCLinkerTool": {
+              "AdditionalLibraryDirectories": [
+                "../src"
+              ],
+              "AdditionalDependencies": [
+                "gommander.lib"
               ]
             }
           }
+        }],
+        ["OS!='win'", {
+          "libraries": [
+            "../src/gommander.a"
+          ],
+          "ldflags": [
+            "-pthread"
+          ],
+          "cflags_cc": [
+            "-std=c++17",
+            "-fPIC"
+          ],
+          "conditions": [
+            ["OS=='mac'", {
+              "xcode_settings": {
+                "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+                "CLANG_CXX_LIBRARY": "libc++",
+                "MACOSX_DEPLOYMENT_TARGET": "10.15",
+                "OTHER_CPLUSPLUSFLAGS": [
+                  "-std=c++17",
+                  "-stdlib=libc++"
+                ]
+              }
+            }],
+            ["OS=='linux'", {
+              "cflags_cc": [
+                "-std=c++17",
+                "-fPIC"
+              ],
+              "ldflags": [
+                "-Wl,--no-as-needed",
+                "-lpthread"
+              ]
+            }]
+          ]
         }]
       ]
     }
