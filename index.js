@@ -49,6 +49,14 @@ function loadAddon() {
         if (missingFunctions.length > 0) {
           console.warn(`Addon loaded but missing functions: ${missingFunctions.join(', ')}`);
           console.warn('This may indicate an incomplete or corrupted build');
+          
+          // Check for common function name mismatches
+          if (missingFunctions.includes('isGoAvailable') && typeof addon['isAvailable'] === 'function') {
+            console.warn('⚠️  Found "isAvailable" function instead of "isGoAvailable"');
+            console.warn('   This indicates a function name mismatch between C++ addon and JavaScript');
+            console.warn('   The C++ addon should export "isGoAvailable", not "isAvailable"');
+            lastError = new Error('Function name mismatch: C++ addon exports "isAvailable" but JavaScript expects "isGoAvailable"');
+          }
         }
         
         // Test if Go backend is actually available
@@ -62,16 +70,66 @@ function loadAddon() {
               if (addon.getLastError) {
                 const goError = addon.getLastError();
                 console.log(`   Go backend error: ${goError}`);
+                
+                // Provide specific guidance based on error type
+                if (goError.includes('DLL') || goError.includes('dll')) {
+                  console.log(`   💡 This appears to be a DLL loading issue`);
+                  console.log(`      Check if gommander.dll exists in the root directory`);
+                } else if (goError.includes('function') || goError.includes('symbol')) {
+                  console.log(`   💡 This appears to be a function export issue`);
+                  console.log(`      The Go library may not be exporting required functions`);
+                }
+                
                 lastError = new Error(`Go backend unavailable: ${goError}`);
+              } else {
+                lastError = new Error('Go backend unavailable: No error details available');
               }
             }
           } catch (testError) {
             console.warn(`Error testing Go backend availability: ${testError.message}`);
+            console.warn(`   This may indicate a function call or parameter mismatch`);
             lastError = testError;
           }
         } else {
           console.warn('Addon loaded but isGoAvailable function not found');
-          lastError = new Error('Addon missing required functions');
+          
+          // Enhanced function name mismatch detection
+          const availableFunctions = Object.keys(addon).filter(key => typeof addon[key] === 'function');
+          
+          if (typeof addon.isAvailable === 'function') {
+            console.warn('⚠️  FUNCTION NAME MISMATCH DETECTED');
+            console.warn('   Found "isAvailable" function instead of "isGoAvailable"');
+            console.warn('   This indicates the C++ addon exports the wrong function name');
+            console.warn('   💡 Solution: Update C++ addon to export "isGoAvailable" instead of "isAvailable"');
+            lastError = new Error('Function name mismatch: C++ addon exports "isAvailable" but JavaScript expects "isGoAvailable"');
+          } else {
+            console.warn('⚠️  MISSING REQUIRED FUNCTION');
+            console.warn(`   Expected function "isGoAvailable" not found in addon`);
+            console.warn(`   Available functions: ${availableFunctions.join(', ')}`);
+            console.warn('   💡 This may indicate an incomplete or corrupted addon build');
+            lastError = new Error(`Addon missing required isGoAvailable function. Available: ${availableFunctions.join(', ')}`);
+          }
+          
+          // Add enhanced diagnostic information to addon
+          addon.getErrorCategory = () => "function-missing";
+          addon.getDetailedDiagnostics = () => ({
+            errorCategory: "function-missing",
+            addonLoaded: true,
+            goBackendAvailable: false,
+            availableFunctions: availableFunctions,
+            expectedFunction: "isGoAvailable",
+            foundMismatch: typeof addon.isAvailable === 'function' ? "isAvailable" : null,
+            platform: process.platform,
+            arch: process.arch,
+            nodeVersion: process.version,
+            errorMessage: lastError.message,
+            troubleshooting: [
+              "Check C++ addon function exports in src/addon.cc",
+              "Ensure 'isGoAvailable' is exported, not 'isAvailable'",
+              "Rebuild the addon with correct function names",
+              "Verify binding.gyp configuration is correct"
+            ]
+          });
         }
         
         break; // Successfully loaded addon, exit loop
@@ -132,6 +190,56 @@ function loadAddon() {
         }
         return "Addon not loaded";
       },
+      
+      // Enhanced diagnostic functions
+      getErrorCategory: () => {
+        if (!addonLoadError) return "no-addon";
+        
+        const errorMsg = addonLoadError.message.toLowerCase();
+        if (errorMsg.includes('dll') || errorMsg.includes('library')) {
+          return "dll-not-found";
+        } else if (errorMsg.includes('function') || errorMsg.includes('symbol')) {
+          return "function-missing";
+        } else if (errorMsg.includes('build') || errorMsg.includes('compile')) {
+          return "build-error";
+        } else if (errorMsg.includes('platform') || errorMsg.includes('arch')) {
+          return "platform-incompatible";
+        }
+        return "unknown-error";
+      },
+      
+      getDetailedDiagnostics: () => ({
+        errorCategory: addon.getErrorCategory(),
+        addonLoaded: false,
+        goBackendAvailable: false,
+        loadAttempts: loadAttempts,
+        platform: process.platform,
+        arch: process.arch,
+        nodeVersion: process.version,
+        errorMessage: addonLoadError ? addonLoadError.message : "No error",
+        troubleshooting: {
+          "dll-not-found": [
+            "Run 'npm run build' to build the addon",
+            "Check if gommander.dll exists in the root directory",
+            "Verify Go is installed and accessible"
+          ],
+          "function-missing": [
+            "Check if C++ addon exports the correct function names",
+            "Verify function name mapping between C++ and JavaScript",
+            "Rebuild the addon with 'npm run build'"
+          ],
+          "build-error": [
+            "Install build dependencies: npm install -g node-gyp",
+            "Check if Go compiler is available",
+            "Verify platform build tools are installed"
+          ],
+          "platform-incompatible": [
+            "Check Node.js version compatibility (>=16.0.0 recommended)",
+            "Verify platform-specific build configuration",
+            "Check if pre-built binaries are available for your platform"
+          ]
+        }
+      }),
       
       // Enhanced command functions with detailed error messages
       createCommand: (name) => ({ 
@@ -222,10 +330,29 @@ class Command {
 
   // Initialize Go backend for this command
   _initializeGoBackend() {
-    if (!goBackendAvailable || !addon.createCommand) {
+    // Only fallback if addon completely failed to load
+    if (!addon) {
       this._fallbackMode = true;
       if (this._name) {
-        console.log(`Creating command '${this._name}' in JavaScript fallback mode`);
+        console.log(`Creating command '${this._name}' in JavaScript fallback mode (addon not loaded)`);
+      }
+      return;
+    }
+
+    // If addon loaded but Go backend is unavailable, still try to use addon functions
+    // but expect them to return error responses rather than falling back immediately
+    if (!goBackendAvailable) {
+      if (this._name) {
+        console.log(`Creating command '${this._name}' with addon loaded but Go backend unavailable`);
+      }
+      // Don't set fallback mode - let individual operations handle Go backend unavailability
+    }
+
+    // Check if createCommand function exists
+    if (!addon.createCommand || typeof addon.createCommand !== 'function') {
+      this._fallbackMode = true;
+      if (this._name) {
+        console.log(`Creating command '${this._name}' in JavaScript fallback mode (createCommand function missing)`);
       }
       return;
     }
@@ -237,18 +364,28 @@ class Command {
         this._goCommandId = result.data;
         console.log(`Created Go command '${this._name || 'root'}' with ID: ${this._goCommandId}`);
       } else {
-        console.warn(`Failed to create Go command: ${result ? result.error : 'Unknown error'}`);
-        this._fallbackMode = true;
+        // Don't fallback immediately - the addon is loaded, just the Go backend has issues
+        console.warn(`Go backend command creation failed: ${result ? result.error : 'Unknown error'}`);
+        console.warn(`Addon is loaded but Go backend is not functional - operations will return errors`);
+        // Keep this._fallbackMode = false so we still try to use addon functions
       }
     } catch (error) {
       console.warn(`Error creating Go command: ${error.message}`);
-      this._fallbackMode = true;
+      console.warn(`This indicates an issue with the addon interface, not complete failure`);
+      // Keep this._fallbackMode = false so we still try to use addon functions
     }
   }
 
   // Check if Go backend is being used
   _isUsingGoBackend() {
-    return !this._fallbackMode && this._goCommandId !== null && goBackendAvailable;
+    // We're using Go backend if:
+    // 1. We're not in fallback mode (addon loaded successfully)
+    // 2. We have a valid Go command ID (command creation succeeded)
+    // 3. The addon has the required functions
+    return !this._fallbackMode && 
+           this._goCommandId !== null && 
+           addon && 
+           typeof addon.createCommand === 'function';
   }
 
   // Get diagnostic information about backend usage
@@ -294,7 +431,7 @@ class Command {
     // Store option locally for fallback
     this._options.set(optionName, option);
 
-    // Try to add option to Go backend
+    // Try to add option to Go backend if available
     if (this._isUsingGoBackend()) {
       try {
         const result = addon.addOption(this._goCommandId, flags, description || "", defaultValue);
@@ -302,15 +439,18 @@ class Command {
         if (result && result.success) {
           console.log(`Added option to Go backend: ${flags}`);
         } else {
-          console.warn(`Failed to add option to Go backend: ${result ? result.error : 'Unknown error'}`);
-          console.warn("Continuing with JavaScript fallback for this option");
+          console.warn(`Go backend option creation failed: ${result ? result.error : 'Unknown error'}`);
+          console.warn(`Option '${flags}' stored locally - will use JavaScript parsing`);
         }
       } catch (error) {
-        console.warn(`Error adding option to Go backend: ${error.message}`);
-        console.warn("Continuing with JavaScript fallback for this option");
+        console.warn(`Error calling Go backend addOption: ${error.message}`);
+        console.warn(`Option '${flags}' stored locally - will use JavaScript parsing`);
       }
+    } else if (this._fallbackMode) {
+      console.log(`Added option (JavaScript fallback - addon not loaded): ${flags}`);
     } else {
-      console.log(`Added option (JS fallback): ${flags}`);
+      // Addon loaded but Go backend not functional
+      console.log(`Added option (JavaScript parsing - Go backend unavailable): ${flags}`);
     }
     
     return this;
@@ -327,7 +467,7 @@ class Command {
     // Store argument locally for fallback
     this._arguments.push(argument);
 
-    // Try to add argument to Go backend
+    // Try to add argument to Go backend if available
     if (this._isUsingGoBackend()) {
       try {
         const result = addon.addArgument(this._goCommandId, name, description || "", required);
@@ -335,15 +475,18 @@ class Command {
         if (result && result.success) {
           console.log(`Added argument to Go backend: ${name}`);
         } else {
-          console.warn(`Failed to add argument to Go backend: ${result ? result.error : 'Unknown error'}`);
-          console.warn("Continuing with JavaScript fallback for this argument");
+          console.warn(`Go backend argument creation failed: ${result ? result.error : 'Unknown error'}`);
+          console.warn(`Argument '${name}' stored locally - will use JavaScript parsing`);
         }
       } catch (error) {
-        console.warn(`Error adding argument to Go backend: ${error.message}`);
-        console.warn("Continuing with JavaScript fallback for this argument");
+        console.warn(`Error calling Go backend addArgument: ${error.message}`);
+        console.warn(`Argument '${name}' stored locally - will use JavaScript parsing`);
       }
+    } else if (this._fallbackMode) {
+      console.log(`Added argument (JavaScript fallback - addon not loaded): ${name}`);
     } else {
-      console.log(`Added argument (JS fallback): ${name}`);
+      // Addon loaded but Go backend not functional
+      console.log(`Added argument (JavaScript parsing - Go backend unavailable): ${name}`);
     }
     
     return this;
@@ -360,7 +503,14 @@ class Command {
     this._subcommands.set(name, cmd);
     
     // Log creation with backend information
-    const backendInfo = cmd._isUsingGoBackend() ? 'Go backend' : 'JS fallback';
+    let backendInfo;
+    if (cmd._isUsingGoBackend()) {
+      backendInfo = 'Go backend';
+    } else if (cmd._fallbackMode) {
+      backendInfo = 'JavaScript fallback - addon not loaded';
+    } else {
+      backendInfo = 'JavaScript parsing - Go backend unavailable';
+    }
     console.log(`Added subcommand '${name}' (${backendInfo})`);
     
     return cmd;
@@ -387,7 +537,7 @@ class Command {
     // Skip node and script name
     const args = argv.slice(2);
     
-    // Try Go backend parsing first
+    // Try Go backend parsing first if available
     if (this._isUsingGoBackend()) {
       try {
         const result = addon.parseArgs(this._goCommandId, args);
@@ -407,25 +557,36 @@ class Command {
               
               return this;
             } else {
-              console.warn(`Go parsing failed: ${parseResult.error || 'Unknown error'}`);
-              console.warn("Falling back to JavaScript parsing");
+              console.warn(`Go backend parsing failed: ${parseResult.error || 'Unknown error'}`);
+              console.warn("Using JavaScript parsing instead");
             }
           } catch (jsonError) {
             console.warn(`Failed to parse Go result JSON: ${jsonError.message}`);
-            console.warn("Falling back to JavaScript parsing");
+            console.warn("Using JavaScript parsing instead");
           }
         } else if (result && result.error) {
-          console.warn(`Go parsing error: ${result.error}`);
-          console.warn("Falling back to JavaScript parsing");
+          console.warn(`Go backend parsing error: ${result.error}`);
+          console.warn("Using JavaScript parsing instead");
+        } else {
+          console.warn(`Unexpected Go backend result format`);
+          console.warn("Using JavaScript parsing instead");
         }
       } catch (error) {
-        console.warn(`Error during Go parsing: ${error.message}`);
-        console.warn("Falling back to JavaScript parsing");
+        console.warn(`Error calling Go backend parseArgs: ${error.message}`);
+        console.warn("Using JavaScript parsing instead");
       }
     }
 
-    // JavaScript fallback parsing
-    console.log(`Parsing with JavaScript fallback: ${this._name || 'root'}`);
+    // JavaScript parsing (either fallback or primary when Go backend unavailable)
+    let parseMode;
+    if (this._fallbackMode) {
+      parseMode = 'JavaScript fallback (addon not loaded)';
+    } else if (!this._isUsingGoBackend()) {
+      parseMode = 'JavaScript parsing (Go backend unavailable)';
+    } else {
+      parseMode = 'JavaScript parsing (Go backend failed)';
+    }
+    console.log(`Parsing with ${parseMode}: ${this._name || 'root'}`);
     return this._parseWithJavaScript(args, argv);
   }
 
@@ -558,23 +719,74 @@ class Command {
 
   // Get diagnostic information about the command and backend
   getDiagnostics() {
+    const backendInfo = this._getBackendInfo();
+    
+    // Get detailed diagnostics from addon if available
+    let addonDiagnostics = null;
+    if (addon && typeof addon.getDetailedDiagnostics === 'function') {
+      try {
+        addonDiagnostics = addon.getDetailedDiagnostics();
+      } catch (error) {
+        // Ignore errors in diagnostic collection
+      }
+    }
+    
     const diagnostics = {
       command: {
         name: this._name,
         goCommandId: this._goCommandId,
         fallbackMode: this._fallbackMode,
+        usingGoBackend: this._isUsingGoBackend(),
         optionsCount: this._options.size,
         argumentsCount: this._arguments.length,
         subcommandsCount: this._subcommands.size
       },
-      backend: this._getBackendInfo(),
+      backend: backendInfo,
       addon: {
         loaded: addon !== null,
-        functions: addon ? Object.keys(addon) : []
-      }
+        functions: addon ? Object.keys(addon).filter(key => typeof addon[key] === 'function') : [],
+        hasIsGoAvailable: addon && typeof addon.isGoAvailable === 'function',
+        hasIsAvailable: addon && typeof addon.isAvailable === 'function', // Check for mismatch
+        errorCategory: addon && typeof addon.getErrorCategory === 'function' ? addon.getErrorCategory() : 'unknown'
+      },
+      detailed: addonDiagnostics,
+      troubleshooting: this._getTroubleshootingSteps()
     };
 
     return diagnostics;
+  }
+  
+  // Get troubleshooting steps based on current state
+  _getTroubleshootingSteps() {
+    const steps = [];
+    
+    if (!addon) {
+      steps.push("1. Build the addon: npm run build");
+      steps.push("2. Check build output for errors");
+      steps.push("3. Verify Node.js version compatibility (>=16.0.0)");
+      steps.push("4. Install build dependencies if missing");
+    } else if (this._fallbackMode) {
+      steps.push("1. Check addon loading errors in console output");
+      steps.push("2. Verify addon file exists in build/Release/ or build/Debug/");
+      steps.push("3. Test addon loading manually");
+    } else if (!this._isUsingGoBackend()) {
+      if (addon && typeof addon.isAvailable === 'function') {
+        steps.push("1. FUNCTION NAME MISMATCH: Update C++ addon to export 'isGoAvailable' instead of 'isAvailable'");
+        steps.push("2. Rebuild the addon after fixing function names");
+        steps.push("3. Verify all function exports match JavaScript expectations");
+      } else if (!goBackendAvailable) {
+        steps.push("1. Check if gommander.dll exists in the root directory");
+        steps.push("2. Verify Go library was built correctly: npm run build-go");
+        steps.push("3. Check for DLL loading errors in console output");
+        steps.push("4. Ensure all runtime dependencies are available");
+      } else {
+        steps.push("1. Check Go command creation errors in console output");
+        steps.push("2. Verify Go backend initialization completed successfully");
+        steps.push("3. Test individual Go functions manually");
+      }
+    }
+    
+    return steps;
   }
 
   // Print diagnostic information
@@ -583,9 +795,26 @@ class Command {
     
     console.log('\n=== GoCommander Diagnostics ===');
     console.log(`Command: ${diagnostics.command.name || 'root'}`);
+    console.log(`Addon Loaded: ${diagnostics.addon.loaded}`);
     console.log(`Go Backend Available: ${diagnostics.backend.goBackendAvailable}`);
+    console.log(`Using Go Backend: ${diagnostics.command.usingGoBackend}`);
     console.log(`Fallback Mode: ${diagnostics.command.fallbackMode}`);
     console.log(`Go Command ID: ${diagnostics.command.goCommandId || 'N/A'}`);
+    
+    // Show function availability
+    if (diagnostics.addon.loaded) {
+      console.log(`Has isGoAvailable: ${diagnostics.addon.hasIsGoAvailable}`);
+      if (diagnostics.addon.hasIsAvailable && !diagnostics.addon.hasIsGoAvailable) {
+        console.log(`⚠️  FUNCTION NAME MISMATCH: Found 'isAvailable' instead of 'isGoAvailable'`);
+      }
+      console.log(`Available Functions: ${diagnostics.addon.functions.join(', ')}`);
+    }
+    
+    // Show error category if available
+    if (diagnostics.addon.errorCategory && diagnostics.addon.errorCategory !== 'unknown') {
+      console.log(`Error Category: ${diagnostics.addon.errorCategory}`);
+    }
+    
     console.log(`Options: ${diagnostics.command.optionsCount}`);
     console.log(`Arguments: ${diagnostics.command.argumentsCount}`);
     console.log(`Subcommands: ${diagnostics.command.subcommandsCount}`);
@@ -598,6 +827,30 @@ class Command {
       const lastError = addon.getLastError();
       if (lastError && lastError !== 'No error') {
         console.log(`Go Backend Error: ${lastError}`);
+      }
+    }
+    
+    // Show troubleshooting steps if there are issues
+    if (diagnostics.troubleshooting.length > 0) {
+      console.log('\nTroubleshooting Steps:');
+      diagnostics.troubleshooting.forEach(step => {
+        console.log(`  ${step}`);
+      });
+    }
+    
+    // Show detailed diagnostics if available
+    if (diagnostics.detailed) {
+      console.log('\nDetailed Information:');
+      console.log(`  Platform: ${diagnostics.detailed.platform} (${diagnostics.detailed.arch})`);
+      console.log(`  Node.js: ${diagnostics.detailed.nodeVersion}`);
+      if (diagnostics.detailed.troubleshooting && diagnostics.detailed.errorCategory) {
+        const categorySteps = diagnostics.detailed.troubleshooting[diagnostics.detailed.errorCategory];
+        if (categorySteps) {
+          console.log(`\nCategory-Specific Steps (${diagnostics.detailed.errorCategory}):`);
+          categorySteps.forEach(step => {
+            console.log(`  • ${step}`);
+          });
+        }
       }
     }
     
@@ -632,16 +885,62 @@ const FallbackSystem = {
     console.log(`Go Backend Available: ${status.goBackendAvailable}`);
     console.log(`Addon Loaded: ${status.addonLoaded}`);
     
+    // Enhanced error categorization
+    if (addon && typeof addon.getErrorCategory === 'function') {
+      const errorCategory = addon.getErrorCategory();
+      console.log(`Error Category: ${errorCategory}`);
+    }
+    
+    // Function availability check
+    if (addon) {
+      const functions = Object.keys(addon).filter(key => typeof addon[key] === 'function');
+      console.log(`Available Functions: ${functions.join(', ')}`);
+      
+      // Check for function name mismatches
+      if (typeof addon.isAvailable === 'function' && typeof addon.isGoAvailable !== 'function') {
+        console.log(`⚠️  FUNCTION NAME MISMATCH: Found 'isAvailable' instead of 'isGoAvailable'`);
+      }
+    }
+    
+    // Detailed error information
     if (status.addonLoadError) {
       console.log(`Addon Load Error: ${status.addonLoadError}`);
+      
+      // Provide specific guidance based on error type
+      const errorMsg = status.addonLoadError.toLowerCase();
+      if (errorMsg.includes('dll') || errorMsg.includes('library')) {
+        console.log(`💡 This appears to be a DLL/library loading issue`);
+      } else if (errorMsg.includes('function') || errorMsg.includes('symbol')) {
+        console.log(`💡 This appears to be a function export/import issue`);
+      } else if (errorMsg.includes('build') || errorMsg.includes('compile')) {
+        console.log(`💡 This appears to be a build/compilation issue`);
+      }
     }
     
     if (status.lastGoError && status.lastGoError !== 'No error') {
       console.log(`Go Backend Error: ${status.lastGoError}`);
     }
     
-    if (addon) {
-      console.log(`Available Functions: ${Object.keys(addon).join(', ')}`);
+    // Platform information
+    console.log(`Platform: ${process.platform} (${process.arch})`);
+    console.log(`Node.js: ${process.version}`);
+    
+    // Get detailed diagnostics if available
+    if (addon && typeof addon.getDetailedDiagnostics === 'function') {
+      try {
+        const detailed = addon.getDetailedDiagnostics();
+        if (detailed.troubleshooting && detailed.errorCategory) {
+          const steps = detailed.troubleshooting[detailed.errorCategory];
+          if (steps) {
+            console.log(`\nRecommended Actions (${detailed.errorCategory}):`);
+            steps.forEach(step => {
+              console.log(`  • ${step}`);
+            });
+          }
+        }
+      } catch (error) {
+        // Ignore diagnostic collection errors
+      }
     }
     
     console.log('=====================================\n');

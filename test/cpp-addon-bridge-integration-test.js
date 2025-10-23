@@ -177,7 +177,7 @@ runner.test("Platform-Specific Library Loading - Windows DLL Detection", async (
     }
     
     // Test addon's ability to handle DLL loading
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     const lastError = addon.getLastError();
     
     if (dllFound && !isAvailable) {
@@ -223,7 +223,7 @@ runner.test("Platform-Specific Library Loading - Unix Static Linking", async () 
     }
     
     // Test addon's static linking behavior
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     const lastError = addon.getLastError();
     
     if (TEST_CONFIG.verbose) {
@@ -242,7 +242,7 @@ runner.test("Platform-Specific Library Loading - Unix Static Linking", async () 
 
 runner.test("Cross-Platform Library Loading Consistency", async () => {
     // Test that the loading mechanism is consistent across platforms
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     const lastError = addon.getLastError();
     
     // Basic consistency checks
@@ -251,7 +251,7 @@ runner.test("Cross-Platform Library Loading Consistency", async () => {
     
     // Test that the addon object has consistent structure
     const requiredMethods = [
-        'hello', 'version', 'isAvailable', 'getLastError',
+        'hello', 'version', 'isGoAvailable', 'getLastError',
         'createCommand', 'addOption', 'addArgument', 'parseArgs', 'getHelp'
     ];
     
@@ -284,7 +284,7 @@ runner.test("Go Function Export Verification", async () => {
         'GetVersion', 'AddRef', 'Release'
     ];
     
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Go backend not available: ${addon.getLastError()}`);
@@ -306,7 +306,7 @@ runner.test("Go Function Export Verification", async () => {
 });
 
 runner.test("Function Import and Binding Verification", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Testing function binding with unavailable Go backend...`);
@@ -354,7 +354,7 @@ runner.test("Function Import and Binding Verification", async () => {
 });
 
 runner.test("Data Marshaling Between JavaScript and Go", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Skipping data marshaling test - Go backend not available`);
@@ -422,7 +422,7 @@ runner.test("Data Marshaling Between JavaScript and Go", async () => {
 // ============================================================================
 
 runner.test("Error Propagation from Go to JavaScript", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Testing error handling without Go backend...`);
@@ -519,7 +519,7 @@ runner.test("Error Propagation from Go to JavaScript", async () => {
 });
 
 runner.test("Memory Management and Cleanup", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Skipping memory management test - Go backend not available`);
@@ -643,7 +643,7 @@ runner.test("Windows DLL Symbol Export Verification", async () => {
     }
     
     // Test that Windows DLL exports are properly loaded
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     const lastError = addon.getLastError();
     
     if (TEST_CONFIG.verbose) {
@@ -653,7 +653,7 @@ runner.test("Windows DLL Symbol Export Verification", async () => {
     
     // Test that all required functions exist regardless of Go backend availability
     const requiredFunctions = [
-        'hello', 'version', 'isAvailable', 'getLastError',
+        'hello', 'version', 'isGoAvailable', 'getLastError',
         'createCommand', 'addOption', 'addArgument', 'parseArgs', 'getHelp',
         'initialize', 'cleanup', 'addRef', 'release'
     ];
@@ -680,7 +680,7 @@ runner.test("Unix Static Library Symbol Resolution", async () => {
     }
     
     // Test that Unix static library symbols are properly resolved
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     const lastError = addon.getLastError();
     
     if (TEST_CONFIG.verbose) {
@@ -749,7 +749,7 @@ runner.test("Cross-Platform Function Signature Consistency", async () => {
 // ============================================================================
 
 runner.test("Memory Leak Detection with Repeated Operations", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Skipping memory leak test - Go backend not available`);
@@ -801,7 +801,7 @@ runner.test("Memory Leak Detection with Repeated Operations", async () => {
 });
 
 runner.test("Concurrent Access Simulation", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Skipping concurrent access test - Go backend not available`);
@@ -849,7 +849,7 @@ runner.test("Concurrent Access Simulation", async () => {
 });
 
 runner.test("Large Data Handling", async () => {
-    const isAvailable = addon.isAvailable();
+    const isAvailable = addon.isGoAvailable();
     
     if (!isAvailable) {
         console.log(`   Skipping large data test - Go backend not available`);
@@ -901,8 +901,8 @@ async function runIntegrationTests() {
     console.log("=".repeat(60));
     console.log(`Platform: ${TEST_CONFIG.platform} (${TEST_CONFIG.arch})`);
     console.log(`Node.js: ${TEST_CONFIG.nodeVersion}`);
-    console.log(`Go Backend Available: ${addon.isAvailable()}`);
-    if (!addon.isAvailable()) {
+    console.log(`Go Backend Available: ${addon.isGoAvailable()}`);
+    if (!addon.isGoAvailable()) {
         console.log(`Go Backend Error: ${addon.getLastError()}`);
     }
     console.log("=".repeat(60));

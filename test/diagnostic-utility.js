@@ -81,7 +81,7 @@ class GoCommanderDiagnostics {
         
         // Test addon methods if available
         if (addon) {
-            const methods = ['hello', 'version', 'isAvailable', 'getLastError', 
+            const methods = ['hello', 'version', 'isGoAvailable', 'getLastError', 
                            'createCommand', 'addOption', 'addArgument', 'parseArgs', 'getHelp'];
             
             for (const method of methods) {
@@ -97,7 +97,7 @@ class GoCommanderDiagnostics {
                         switch (method) {
                             case 'hello':
                             case 'version':
-                            case 'isAvailable':
+                            case 'isGoAvailable':
                             case 'getLastError':
                                 result = addon[method]();
                                 break;

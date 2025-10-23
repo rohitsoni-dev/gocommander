@@ -143,13 +143,15 @@ public:
 private:
 #if defined(_WIN32)
     bool LoadWindowsDLL() {
-        // Try multiple paths for the DLL
+        // Try multiple paths for the DLL - prioritize root directory where gommander.dll exists
         const std::vector<std::string> dllPaths = {
-            "gommander.dll",                    // Current directory (copied by gyp)
-            "./gommander.dll",                  // Explicit current directory
-            "build/Release/gommander.dll",      // Build directory (most likely location)
+            "./gommander.dll",                  // Root directory (highest priority)
+            "gommander.dll",                    // Current directory fallback
+            "build/Release/gommander.dll",      // Build directory
             "build/Debug/gommander.dll",        // Debug build directory
-            "src/go/gommander.dll",             // Source directory
+            "src/gommander.dll",                // Source directory
+            "src/go/gommander.dll",             // Go source directory
+            "../gommander.dll",                 // Parent directory
             "../src/go/gommander.dll",          // From build directory
             "./src/go/gommander.dll"            // Relative to current
         };
@@ -157,19 +159,26 @@ private:
         HMODULE h = nullptr;
         std::string detailed_error;
 
+        std::cout << "Attempting to load gommander.dll from multiple paths..." << std::endl;
+
         for (const auto& dllPath : dllPaths) {
+            std::cout << "Trying to load DLL from: " << dllPath << std::endl;
             h = LoadLibraryA(dllPath.c_str());
             if (h) {
+                std::cout << "✅ Successfully loaded gommander.dll from: " << dllPath << std::endl;
                 dll_handle_ = h;
                 break;
+            } else {
+                // Get Windows error code for more detailed error reporting
+                DWORD errorCode = ::GetLastError();
+                std::cout << "❌ Failed to load DLL from: " << dllPath << " (Windows error: " << errorCode << ")" << std::endl;
+                detailed_error += "Failed to load '" + dllPath + "' (error " + std::to_string(static_cast<unsigned long>(errorCode)) + "); ";
             }
-            
-            // Collect error information
-            detailed_error += "Failed to load '" + dllPath + "'; ";
         }
 
         if (!h) {
-            last_error_ = "Failed to load Go DLL from any path: " + detailed_error;
+            last_error_ = "Failed to load gommander.dll from any path. Attempted paths: " + detailed_error;
+            std::cout << "❌ " << last_error_ << std::endl;
             return false;
         }
 
@@ -866,7 +875,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
                     Napi::Function::New(env, [error_msg](const Napi::CallbackInfo& info) {
                         return Napi::String::New(info.Env(), error_msg);
                     }));
-        exports.Set(Napi::String::New(env, "isAvailable"),
+        exports.Set(Napi::String::New(env, "isGoAvailable"),
                     Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
                         return Napi::Boolean::New(info.Env(), false);
                     }));
@@ -899,7 +908,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
                 Napi::Function::New(env, [](const Napi::CallbackInfo& info) { return Method(info); }));
     exports.Set(Napi::String::New(env, "version"),
                 Napi::Function::New(env, [](const Napi::CallbackInfo& info) { return GetVersion(info); }));
-    exports.Set(Napi::String::New(env, "isAvailable"),
+    exports.Set(Napi::String::New(env, "isGoAvailable"),
                 Napi::Function::New(env, [](const Napi::CallbackInfo& info) { return IsGoAvailable(info); }));
     exports.Set(Napi::String::New(env, "getLastError"),
                 Napi::Function::New(env, [](const Napi::CallbackInfo& info) { return GetLastError(info); }));
