@@ -75,18 +75,17 @@ function getBuildConfig() {
   if (platform.isWindows) {
     // Windows-specific configuration
     config.buildMode = "c-shared";
-    config.outputFile = "../gommander.dll";
-    config.libFile = "../gommander.lib";
+    config.outputFile = "gommander.dll";
+    config.libFile = "gommander.lib";
     config.env.GOOS = "windows";
     config.env.GOARCH = platform.arch === "x64" ? "amd64" : "386";
     config.buildFlags = [
-      "-ldflags=-s -w",
       "-trimpath"
     ];
   } else if (platform.isMacOS) {
     // macOS-specific configuration
     config.buildMode = "c-archive";
-    config.outputFile = "../gommander.a";
+    config.outputFile = "gommander.a";
     config.env.GOOS = "darwin";
     config.env.GOARCH = platform.arch === "arm64" ? "arm64" : "amd64";
     config.env.CGO_CFLAGS = "-mmacosx-version-min=10.15";
@@ -98,7 +97,7 @@ function getBuildConfig() {
   } else {
     // Linux and other Unix-like systems
     config.buildMode = "c-archive";
-    config.outputFile = "../gommander.a";
+    config.outputFile = "gommander.a";
     config.env.GOOS = "linux";
     config.env.GOARCH = platform.arch === "x64" ? "amd64" : platform.arch;
     config.buildFlags = [
@@ -113,7 +112,7 @@ function getBuildConfig() {
 // Function to validate build artifacts
 function validateBuildArtifacts(config, srcDir) {
   const outputPath = path.join(srcDir, config.outputFile);
-  const headerPath = path.join(srcDir, "../gommander.h");
+  const headerPath = path.join(srcDir, "gommander.h");
   
   console.log("Validating build artifacts...");
   
@@ -148,6 +147,8 @@ function validateBuildArtifacts(config, srcDir) {
       console.log(`✓ Import library: ${libPath} (${libStats.size} bytes)`);
     } else {
       console.warn(`⚠ Import library not found: ${libPath}`);
+      // The .lib file should be generated automatically by Go when building c-shared
+      console.warn(`   This may indicate a Go build configuration issue`);
     }
   }
   
@@ -157,10 +158,10 @@ function validateBuildArtifacts(config, srcDir) {
 // Function to clean previous build artifacts
 function cleanBuildArtifacts(srcDir) {
   const artifactsToClean = [
-    "../gommander.dll",
-    "../gommander.lib", 
-    "../gommander.a",
-    "../gommander.h"
+    "gommander.dll",
+    "gommander.lib", 
+    "gommander.a",
+    "gommander.h"
   ];
   
   console.log("Cleaning previous build artifacts...");
@@ -209,10 +210,19 @@ async function build() {
     const buildArgs = [
       "build",
       `-buildmode=${config.buildMode}`,
-      "-o", config.outputFile,
-      ...config.buildFlags,
-      "gommander.go"
+      "-o", config.outputFile
     ];
+    
+    // Add build flags properly
+    for (const flag of config.buildFlags) {
+      if (flag.startsWith("-ldflags=")) {
+        buildArgs.push("-ldflags", flag.substring(9));
+      } else {
+        buildArgs.push(flag);
+      }
+    }
+    
+    buildArgs.push("gommander.go");
 
     // Set environment variables
     const buildEnv = { ...config.env };

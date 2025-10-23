@@ -4,9 +4,10 @@
   "description": "A Go implementation for command-line interfaces with Node.js compatibility",
   "main": "index.js",
   "scripts": {
+    "prebuild": "npm run go:build",
     "build": "node-gyp configure build",
-    "clean": "node-gyp clean",
-    "rebuild": "node-gyp rebuild",
+    "clean": "node-gyp clean && npm run go:build-clean",
+    "rebuild": "npm run clean && npm run build",
     "go:build": "node scripts/build-go.js",
     "go:build-clean": "node scripts/build-go.js --clean",
     "go:build-verbose": "node scripts/build-go.js --verbose",

@@ -755,8 +755,8 @@ func Cleanup() {
 	nextID = 1
 }
 
-//export GetVersion
-func GetVersion() *C.char {
+//export GetGoVersion
+func GetGoVersion() *C.char {
 	return C.CString("1.0.0")
 }
 

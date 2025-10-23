@@ -19,13 +19,11 @@
       ],
       "conditions": [
         ["OS=='win'", {
-          "libraries": [
-            "../src/gommander.lib"
-          ],
           "defines": [
             "_HAS_EXCEPTIONS=1",
             "WIN32_LEAN_AND_MEAN",
-            "NOMINMAX"
+            "NOMINMAX",
+            "GOMMANDER_DYNAMIC_LINK"
           ],
           "msvs_settings": {
             "VCCLCompilerTool": {
@@ -33,22 +31,23 @@
               "RuntimeLibrary": 2,
               "AdditionalIncludeDirectories": [
                 "<!@(node -p \"require('node-addon-api').include\")",
-                "src"
-              ]
-            },
-            "VCLinkerTool": {
-              "AdditionalLibraryDirectories": [
-                "../src"
-              ],
-              "AdditionalDependencies": [
-                "gommander.lib"
+                "src",
+                "src/go"
               ]
             }
-          }
+          },
+          "copies": [
+            {
+              "destination": "<(PRODUCT_DIR)",
+              "files": [
+                "src/go/gommander.dll"
+              ]
+            }
+          ]
         }],
         ["OS!='win'", {
           "libraries": [
-            "../src/gommander.a"
+            "../src/go/gommander.a"
           ],
           "ldflags": [
             "-pthread"

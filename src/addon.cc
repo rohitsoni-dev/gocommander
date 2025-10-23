@@ -1,4 +1,4 @@
-#include "gommander.h" // Include the Go-generated header
+#include "go/gommander.h" // Include the Go-generated header
 #include <iostream>
 #include <napi.h>
 #include <string>
@@ -26,7 +26,7 @@ typedef char* (*ParseArgsFn)(uintptr_t, int, char**);
 typedef char* (*GetHelpFn)(uintptr_t);
 typedef void (*InitializeFn)();
 typedef void (*CleanupFn)();
-typedef char* (*GetVersionFn)();
+typedef char* (*GetGoVersionFn)();
 typedef int (*AddRefFn)(uintptr_t);
 typedef int (*ReleaseFn)(uintptr_t);
 
@@ -52,7 +52,7 @@ public:
     GetHelpFn GetHelp;
     InitializeFn Initialize;
     CleanupFn Cleanup;
-    GetVersionFn GetVersion;
+    GetGoVersionFn GetGoVersion;
     AddRefFn AddRef;
     ReleaseFn Release;
 
@@ -70,7 +70,7 @@ public:
         GetHelp = nullptr;
         Initialize = nullptr;
         Cleanup = nullptr;
-        GetVersion = nullptr;
+        GetGoVersion = nullptr;
         AddRef = nullptr;
         Release = nullptr;
     }
@@ -145,13 +145,13 @@ private:
     bool LoadWindowsDLL() {
         // Try multiple paths for the DLL
         const std::vector<std::string> dllPaths = {
-            "gommander.dll",                    // Current directory
+            "gommander.dll",                    // Current directory (copied by gyp)
             "./gommander.dll",                  // Explicit current directory
-            "src/gommander.dll",                // Source directory
-            "../src/gommander.dll",             // From build directory
-            "./src/gommander.dll",              // Relative to current
-            "build/Release/gommander.dll",      // Build directory
-            "build/Debug/gommander.dll"         // Debug build directory
+            "build/Release/gommander.dll",      // Build directory (most likely location)
+            "build/Debug/gommander.dll",        // Debug build directory
+            "src/go/gommander.dll",             // Source directory
+            "../src/go/gommander.dll",          // From build directory
+            "./src/go/gommander.dll"            // Relative to current
         };
 
         HMODULE h = nullptr;
@@ -192,13 +192,13 @@ private:
         GetHelp = (GetHelpFn)GetProcAddress(handle, "GetHelp");
         Initialize = (InitializeFn)GetProcAddress(handle, "Initialize");
         Cleanup = (CleanupFn)GetProcAddress(handle, "Cleanup");
-        GetVersion = (GetVersionFn)GetProcAddress(handle, "GetVersion");
+        GetGoVersion = (GetGoVersionFn)GetProcAddress(handle, "GetGoVersion");
         AddRef = (AddRefFn)GetProcAddress(handle, "AddRef");
         Release = (ReleaseFn)GetProcAddress(handle, "Release");
 
         // Check if all required functions are loaded
         if (!CreateCommand || !AddOption || !AddArgument || !ParseArgs || 
-            !GetHelp || !Initialize || !GetVersion) {
+            !GetHelp || !Initialize || !GetGoVersion) {
             last_error_ = "Failed to load required functions from Go DLL";
             return false;
         }
@@ -208,21 +208,9 @@ private:
 #else
     bool LoadUnixLibrary() {
         // For Unix systems, we use static linking, so functions should be available directly
-        // We need to declare the external functions first
-        extern "C" {
-            uintptr_t CreateCommand(char* name);
-            int AddOption(uintptr_t cmdPtr, char* flags, char* desc, char* defaultVal);
-            int AddArgument(uintptr_t cmdPtr, char* name, char* desc, int required);
-            char* ParseArgs(uintptr_t cmdPtr, int argc, char** argv);
-            char* GetHelp(uintptr_t cmdPtr);
-            void Initialize();
-            void Cleanup();
-            char* GetVersion();
-            int AddRef(uintptr_t cmdPtr);
-            int Release(uintptr_t cmdPtr);
-        }
+        // The functions are declared in the header file and linked statically
         
-        // Assign function pointers
+        // Assign function pointers to the statically linked functions
         CreateCommand = ::CreateCommand;
         AddOption = ::AddOption;
         AddArgument = ::AddArgument;
@@ -230,7 +218,7 @@ private:
         GetHelp = ::GetHelp;
         Initialize = ::Initialize;
         Cleanup = ::Cleanup;
-        GetVersion = ::GetVersion;
+        GetGoVersion = ::GetGoVersion;
         AddRef = ::AddRef;
         Release = ::Release;
 
@@ -816,8 +804,8 @@ Napi::String GetVersion(const Napi::CallbackInfo &info) {
         return Napi::String::New(env, error_msg);
     }
     
-    if (g_go_backend->GetVersion) {
-        char* version = g_go_backend->GetVersion();
+    if (g_go_backend->GetGoVersion) {
+        char* version = g_go_backend->GetGoVersion();
         if (version) {
             std::string version_str(version);
             // Note: In a real implementation, we might need to free the string
